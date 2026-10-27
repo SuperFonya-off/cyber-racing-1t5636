@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CyberCore 3D Racing - Online</title>
+  
+  <!-- CDN Three.js и Socket.IO -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #05050a;
+      color: #fff;
+    }
+
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    /* 3D Оверлей Никнеймов */
+    #nicknames-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .player-nametag {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      padding: 4px 10px;
+      background: rgba(10, 10, 20, 0.85);
+      border: 1px solid #00f3ff;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: bold;
+      color: #ffffff;
+      white-space: nowrap;
+      box-shadow: 0 0 10px rgba(0, 243, 255, 0.4);
+      text-shadow: 0 0 5px #000;
+      transition: opacity 0.2s;
+    }
+
+    .glass-panel {
+      background: rgba(15, 18, 30, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 243, 255, 0.2);
+      border-radius: 14px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+    }
+
+    /* Лобби */
+    #lobby-screen {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      padding: 40px;
+      width: 420px;
+      text-align: center;
+    }
+
+    .neon-title {
+      font-size: 26px;
+      color: #00f3ff;
+      text-shadow: 0 0 15px #00f3ff;
+      letter-spacing: 2px;
+      margin-bottom: 5px;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: #a0aab8;
+      margin-bottom: 25px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: #00f3ff;
+      margin-bottom: 8px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 15px;
+      background: rgba(5, 5, 12, 0.8);
+      border: 1px solid #00f3ff44;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 15px;
+      outline: none;
+    }
+
+    input[type="text"]:focus {
+      border-color: #00f3ff;
+      box-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+    }
+
+    .color-picker {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .color-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .color-btn.active, .color-btn:hover {
+      transform: scale(1.2);
+      border-color: #ffffff;
+      box-shadow: 0 0 12px #fff;
+    }
+
+    .neon-button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #00f3ff, #0066ff);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-weight: bold;
+      font-size: 15px;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(0, 243, 255, 0.4);
+      transition: all 0.2s;
+    }
+
+    .neon-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 30px rgba(0, 243, 255, 0.7);
+    }
+
+    /* HUD */
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .hidden { display: none !important; }
+
+    .speedometer-box {
+      position: absolute;
+      bottom: 30px;
+      right: 30px;
+      padding: 20px 30px;
+      text-align: center;
+    }
+
+    #speed-value {
+      font-size: 48px;
+      font-weight: 900;
+      color: #00f3ff;
+      text-shadow: 0 0 15px #00f3ff;
+      line-height: 1;
+    }
+
+    .speed-unit { font-size: 12px; color: #888; margin-bottom: 8px; }
+    #lap-counter { font-size: 14px; color: #ffaa00; font-weight: bold; }
+
+    .leaderboard-box {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      padding: 15px 20px;
+      min-width: 220px;
+    }
+
+    .leaderboard-box h3 {
+      font-size: 13px;
+      color: #00f3ff;
+      margin-bottom: 10px;
+      border-bottom: 1px solid rgba(0,243,255,0.2);
+      padding-bottom: 5px;
+    }
+
+    #leaderboard-list {
+      list-style: none;
+      font-size: 13px;
+    }
+
+    #leaderboard-list li {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .chat-box {
+      position: absolute;
+      bottom: 30px;
+      left: 30px;
+      width: 320px;
+      height: 180px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      pointer-events: auto;
+    }
+
+    #chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .chat-msg { word-break: break-word; }
+
+    .controls-hint {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 18px;
+      font-size: 12px;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+  <div id="nicknames-overlay"></div>
+
+  <!-- Экран входа -->
+  <div id="lobby-screen" class="glass-panel">
+    <div class="lobby-content">
+      <h1 class="neon-title">CYBERCORE 3D RACING</h1>
+      <p class="subtitle">Сетевой киберпанк симулятор гонок</p>
+
+      <div class="form-group">
+        <label for="nickname-input">Введите ваш Никнейм:</label>
+        <input type="text" id="nickname-input" placeholder="CyberRacer_99" maxlength="14" value="CyberRacer">
+      </div>
+
+      <div class="form-group">
+        <label>Выберите цвет машинки:</label>
+        <div class="color-picker">
+          <button class="color-btn active" data-color="#ff0055" style="background:#ff0055;"></button>
+          <button class="color-btn" data-color="#00f3ff" style="background:#00f3ff;"></button>
+          <button class="color-btn" data-color="#00ff66" style="background:#00ff66;"></button>
+          <button class="color-btn" data-color="#ffaa00" style="background:#ffaa00;"></button>
+          <button class="color-btn" data-color="#a855f7" style="background:#a855f7;"></button>
+        </div>
+      </div>
+
+      <button id="start-btn" class="neon-button">ПОДКЛЮЧИТЬСЯ К ГОНКЕ</button>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="speedometer-box glass-panel">
+      <div id="speed-value">0</div>
+      <div class="speed-unit">KM/H</div>
+      <div id="lap-counter">КРУГ: <span>1 / 3</span></div>
+    </div>
+
+    <div class="leaderboard-box glass-panel">
+      <h3>🏆 ЛИДЕРЫ ГОНКИ</h3>
+      <ol id="leaderboard-list"></ol>
+    </div>
+
+    <div class="chat-box glass-panel">
+      <div id="chat-messages"></div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Нажмите Enter для чата..." maxlength="60">
+      </div>
+    </div>
+
+    <div class="controls-hint glass-panel">
+      [W/A/S/D] - Управление | [Пробел] - Тормоз
+    </div>
+  </div>
+
+  <!-- 3D + Сетевая Логика -->
+  <script>
+    // ====== 1. THREE.JS 3D ДВИЖОК ======
+    let scene, camera, renderer;
+    let localCarMesh;
+    let remoteCars = {};
+    let checkpoints = [];
+    let audioCtx, engineOsc, engineGain;
+
+    const carPhysics = {
+      x: 0, z: 0, y: 0.4,
+      speed: 0,
+      maxSpeed: 1.4,
+      reverseMaxSpeed: -0.4,
+      acceleration: 0.025,
+      friction: 0.96,
+      turnSpeed: 0.035,
+      rotationY: 0,
+      currentCheckpoint: 0,
+      currentLap: 1
+    };
+
+    const keys = { w: false, a: false, s: false, d: false };
+
+    function init3D() {
+      const container = document.getElementById('canvas-container');
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x060612);
+      scene.fog = new THREE.FogExp2(0x060612, 0.012);
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 5, -10);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      container.appendChild(renderer.domElement);
+
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+      scene.add(ambientLight);
+
+      const sunLight = new THREE.DirectionalLight(0x00f3ff, 0.8);
+      sunLight.position.set(50, 100, 50);
+      sunLight.castShadow = true;
+      scene.add(sunLight);
+
+      buildEnvironment();
+      buildTrack();
+
+      window.addEventListener('resize', onWindowResize);
+      setupControls();
+      initAudio();
+
+      animate();
+    }
+
+    function createCarMesh(colorHex = 0xff0055) {
+      const carGroup = new THREE.Group();
+
+      const bodyGeo = new THREE.BoxGeometry(1.4, 0.5, 2.8);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.2, metalness: 0.8 });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.y = 0.4;
+      body.castShadow = true;
+      carGroup.add(body);
+
+      const cabinGeo = new THREE.BoxGeometry(1.0, 0.4, 1.2);
+      const cabinMat = new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.1, metalness: 0.9 });
+      const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+      cabin.position.set(0, 0.7, -0.2);
+      carGroup.add(cabin);
+
+      const spoilerGeo = new THREE.BoxGeometry(1.5, 0.1, 0.4);
+      const spoiler = new THREE.Mesh(spoilerGeo, bodyMat);
+      spoiler.position.set(0, 0.85, 1.2);
+      carGroup.add(spoiler);
+
+      const lightGeo = new THREE.BoxGeometry(0.3, 0.1, 0.1);
+      const lightMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
+      const lightL = new THREE.Mesh(lightGeo, lightMat);
+      lightL.position.set(-0.45, 0.4, -1.4);
+      const lightR = lightL.clone();
+      lightR.position.x = 0.45;
+      carGroup.add(lightL, lightR);
+
+      const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16);
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+      wheelGeo.rotateZ(Math.PI / 2);
+
+      const wheelPositions = [
+        [-0.75, 0.3, -0.9], [0.75, 0.3, -0.9],
+        [-0.75, 0.3, 0.9],  [0.75, 0.3, 0.9]
+      ];
+
+      wheelPositions.forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+        wheel.position.set(...pos);
+        carGroup.add(wheel);
+      });
+
+      return carGroup;
+    }
+
+    function buildTrack() {
+      const trackPoints = [
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(60, 0, 40),
+        new THREE.Vector3(120, 0, 0),
+        new THREE.Vector3(140, 0, -80),
+        new THREE.Vector3(60, 0, -140),
+        new THREE.Vector3(-60, 0, -120),
+        new THREE.Vector3(-100, 0, -40)
+      ];
+
+      const curve = new THREE.CatmullRomCurve3(trackPoints, true);
+      const points = curve.getPoints(200);
+
+      const tubeGeo = new THREE.TubeGeometry(curve, 100, 8, 12, true);
+      const tubeMat = new THREE.MeshStandardMaterial({ color: 0x121324, wireframe: true });
+      const tube = new THREE.Mesh(tubeGeo, tubeMat);
+      tube.position.y = -0.2;
+      scene.add(tube);
+
+      const groundGeo = new THREE.PlaneGeometry(500, 500);
+      const groundMat = new THREE.MeshStandardMaterial({ color: 0x05050c, roughness: 0.9 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      checkpoints = [
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(120, 0, 0),
+        new THREE.Vector3(60, 0, -140),
+        new THREE.Vector3(-100, 0, -40)
+      ];
+    }
+
+    function buildEnvironment() {
+      const starsGeo = new THREE.BufferGeometry();
+      const count = 1500;
+      const positions = new Float32Array(count * 3);
+
+      for (let i = 0; i < count * 3; i++) {
+        positions[i] = (Math.random() - 0.5) * 600;
+      }
+      starsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const starsMat = new THREE.PointsMaterial({ color: 0x00f3ff, size: 1 });
+      const starField = new THREE.Points(starsGeo, starsMat);
+      scene.add(starField);
+    }
+
+    function updatePhysics() {
+      if (!localCarMesh) return;
+
+      if (keys.w) carPhysics.speed = Math.min(carPhysics.speed + carPhysics.acceleration, carPhysics.maxSpeed);
+      else if (keys.s) carPhysics.speed = Math.max(carPhysics.speed - carPhysics.acceleration, carPhysics.reverseMaxSpeed);
+      else carPhysics.speed *= carPhysics.friction;
+
+      if (Math.abs(carPhysics.speed) > 0.05) {
+        const dir = carPhysics.speed > 0 ? 1 : -1;
+        if (keys.a) carPhysics.rotationY += carPhysics.turnSpeed * dir;
+        if (keys.d) carPhysics.rotationY -= carPhysics.turnSpeed * dir;
+      }
+
+      carPhysics.x -= Math.sin(carPhysics.rotationY) * carPhysics.speed;
+      carPhysics.z -= Math.cos(carPhysics.rotationY) * carPhysics.speed;
+
+      localCarMesh.position.set(carPhysics.x, carPhysics.y, carPhysics.z);
+      localCarMesh.rotation.y = carPhysics.rotationY;
+
+      const camOffset = new THREE.Vector3(
+        Math.sin(carPhysics.rotationY) * 9,
+        4,
+        Math.cos(carPhysics.rotationY) * 9
+      );
+      camera.position.x = carPhysics.x + camOffset.x;
+      camera.position.y = carPhysics.y + camOffset.y;
+      camera.position.z = carPhysics.z + camOffset.z;
+      camera.lookAt(carPhysics.x, carPhysics.y + 0.8, carPhysics.z);
+
+      if (engineOsc && audioCtx) {
+        engineOsc.frequency.setValueAtTime(60 + Math.abs(carPhysics.speed) * 180, audioCtx.currentTime);
+      }
+
+      document.getElementById('speed-value').innerText = Math.round(Math.abs(carPhysics.speed) * 160);
+      checkCheckpoints();
+    }
+
+    function checkCheckpoints() {
+      const nextCpIdx = (carPhysics.currentCheckpoint + 1) % checkpoints.length;
+      const targetCp = checkpoints[nextCpIdx];
+      const dist = new THREE.Vector3(carPhysics.x, 0, carPhysics.z).distanceTo(targetCp);
+
+      if (dist < 15) {
+        carPhysics.currentCheckpoint = nextCpIdx;
+        if (nextCpIdx === 0) {
+          carPhysics.currentLap++;
+          document.getElementById('lap-counter').innerHTML = `КРУГ: <span>${carPhysics.currentLap} / 3</span>`;
+        }
+        if (window.sendLapUpdate) {
+          window.sendLapUpdate(carPhysics.currentLap, carPhysics.currentCheckpoint);
+        }
+      }
+    }
+
+    function update3DNametags() {
+      for (let id in remoteCars) {
+        const carData = remoteCars[id];
+        if (!carData.mesh || !carData.nametagEl) continue;
+
+        const pos = carData.mesh.position.clone();
+        pos.y += 1.6;
+        pos.project(camera);
+
+        if (pos.z > 1) {
+          carData.nametagEl.style.display = 'none';
+          continue;
+        }
+
+        const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-(pos.y * 0.5) + 0.5) * window.innerHeight;
+
+        carData.nametagEl.style.display = 'block';
+        carData.nametagEl.style.left = `${x}px`;
+        carData.nametagEl.style.top = `${y}px`;
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      updatePhysics();
+      update3DNametags();
+
+      for (let id in remoteCars) {
+        const c = remoteCars[id];
+        if (c.mesh && c.targetPos) {
+          c.mesh.position.lerp(c.targetPos, 0.2);
+          c.mesh.rotation.y += (c.targetRotY - c.mesh.rotation.y) * 0.2;
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function setupControls() {
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') keys.w = true;
+        if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') keys.s = true;
+        if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.a = true;
+        if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.d = true;
+      });
+
+      window.addEventListener('keyup', (e) => {
+        if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') keys.w = false;
+        if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') keys.s = false;
+        if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.a = false;
+        if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.d = false;
+      });
+    }
+
+    function initAudio() {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        engineOsc = audioCtx.createOscillator();
+        engineGain = audioCtx.createGain();
+        engineOsc.type = 'sawtooth';
+        engineOsc.frequency.setValueAtTime(60, audioCtx.currentTime);
+        engineGain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        engineOsc.connect(engineGain);
+        engineGain.connect(audioCtx.destination);
+        engineOsc.start();
+      } catch(e) {}
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    window.onload = () => { init3D(); };
+
+    // ====== 2. МУЛЬТИПЛЕЕР И SOCKET.IO ======
+    let socket;
+    let selectedColor = '#ff0055';
+    let myPlayerId = null;
+
+    document.querySelectorAll('.color-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        selectedColor = e.target.getAttribute('data-color');
+      });
+    });
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+      const nickname = document.getElementById('nickname-input').value.trim() || 'Racer';
+      document.getElementById('lobby-screen').classList.add('hidden');
+      document.getElementById('hud').classList.remove('hidden');
+      initSocket(nickname, selectedColor);
+    });
+
+    function initSocket(nickname, color) {
+      socket = io();
+      socket.emit('joinGame', { nickname, color });
+
+      socket.on('initLocalPlayer', (data) => {
+        myPlayerId = data.id;
+        localCarMesh = createCarMesh(parseInt(color.replace('#', '0x')));
+        scene.add(localCarMesh);
+
+        for (let id in data.players) {
+          if (id !== myPlayerId) {
+            spawnRemotePlayer(data.players[id]);
+          }
+        }
+
+        setInterval(sendTransform, 33);
+      });
+
+      socket.on('playerJoined', (playerData) => {
+        spawnRemotePlayer(playerData);
+      });
+
+      socket.on('playerMoved', (data) => {
+        if (remoteCars[data.id]) {
+          remoteCars[data.id].targetPos = new THREE.Vector3(data.x, data.y, data.z);
+          remoteCars[data.id].targetRotY = data.rotationY;
+        }
+      });
+
+      socket.on('playerLeft', (id) => {
+        if (remoteCars[id]) {
+          scene.remove(remoteCars[id].mesh);
+          if (remoteCars[id].nametagEl) remoteCars[id].nametagEl.remove();
+          delete remoteCars[id];
+        }
+      });
+
+      socket.on('updateLeaderboard', (leaderboard) => {
+        const list = document.getElementById('leaderboard-list');
+        list.innerHTML = '';
+        leaderboard.forEach((p, idx) => {
+          const li = document.createElement('li');
+          li.innerHTML = `<span style="color:${p.color}">${idx + 1}. ${p.nickname}</span> <span>Круг ${p.lap}</span>`;
+          list.appendChild(li);
+        });
+      });
+
+      socket.on('receiveChatMessage', (data) => {
+        const msgBox = document.getElementById('chat-messages');
+        const msgEl = document.createElement('div');
+        msgEl.className = 'chat-msg';
+        msgEl.innerHTML = `<b style="color:${data.color}">${data.nickname}:</b> ${data.text}`;
+        msgBox.appendChild(msgEl);
+        msgBox.scrollTop = msgBox.scrollHeight;
+      });
+
+      setupChatInput();
+    }
+
+    function sendTransform() {
+      if (!socket || !localCarMesh) return;
+      socket.emit('playerTransform', {
+        x: carPhysics.x,
+        y: carPhysics.y,
+        z: carPhysics.z,
+        rotationY: carPhysics.rotationY,
+        speed: carPhysics.speed
+      });
+    }
+
+    window.sendLapUpdate = function(lap, checkpoint) {
+      if (socket) {
+        socket.emit('updateLapProgress', { lap, checkpoint });
+      }
+    };
+
+    function spawnRemotePlayer(p) {
+      if (remoteCars[p.id]) return;
+
+      const mesh = createCarMesh(parseInt(p.color.replace('#', '0x')));
+      scene.add(mesh);
+
+      const nametag = document.createElement('div');
+      nametag.className = 'player-nametag';
+      nametag.innerText = p.nickname;
+      nametag.style.borderColor = p.color;
+      document.getElementById('nicknames-overlay').appendChild(nametag);
+
+      remoteCars[p.id] = {
+        mesh: mesh,
+        nametagEl: nametag,
+        targetPos: new THREE.Vector3(p.x, p.y, p.z),
+        targetRotY: p.rotationY
+      };
+    }
+
+    function setupChatInput() {
+      const input = document.getElementById('chat-input');
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && input.value.trim() !== '') {
+          socket.emit('sendChatMessage', input.value.trim());
+          input.value = '';
+        }
+      });
+    }
+  </script>
+</body>
+</html>
